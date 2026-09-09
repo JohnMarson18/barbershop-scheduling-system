@@ -30,36 +30,20 @@ O projeto é **white-label**: o nome da barbearia e contato de WhatsApp são con
 
 ---
 
-## Instalação e Uso
+## Como rodar
 
-1. **Clone o repositório:**
-   ```bash
-   git clone https://github.com/seu-usuario/barberflow.git
-   cd barberflow
-   ```
+```bash
+# Instalação
+git clone https://github.com/seu-usuario/barberflow.git
+cd barberflow
+npm install
 
-2. **Instale as dependências:**
-   ```bash
-   npm install
-   ```
+# Variáveis de ambiente
+cp .env.example .env.local
 
-3. **Configure as variáveis de ambiente:**
-   ```bash
-   cp .env.example .env.local
-   ```
-   No `.env.local`, defina o nome da sua barbearia:
-   ```env
-   NEXT_PUBLIC_APP_NAME="BarberFlow"
-   NEXT_PUBLIC_SHOP_WHATSAPP="5511999999999"
-   ADMIN_EMAIL=admin@barberflow.com
-   ADMIN_PASSWORD=admin123
-   ```
-
-4. **Inicie o servidor de desenvolvimento:**
-   ```bash
-   npm run dev
-   ```
-   Acesse [http://localhost:3000](http://localhost:3000).
+# Execução
+npm run dev
+```
 
 ---
 
