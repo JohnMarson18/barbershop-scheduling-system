@@ -34,7 +34,7 @@ O projeto é **white-label**: o nome da barbearia e contato de WhatsApp são con
 
 ```bash
 # Instalação
-git clone https://github.com/JohnMarston18/barberflow.git
+git clone https://github.com/JohnMarson18/barbershop-scheduling-system.git
 cd barberflow
 npm install
 
