@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useBarbers } from "@/hooks/useBarbers";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -19,8 +19,17 @@ import {
 import { Loader2, Plus, UserCheck, ShieldAlert, KeyRound, CheckCircle2 } from "lucide-react";
 import { UserRole } from "@/types/api";
 
+interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  barber_id?: string | null;
+  barber_name?: string;
+}
+
 export default function AdminTeamPage() {
-  const { profile, isAdmin, register } = useAuth();
+  const { profile, isAdmin, register, getAuthHeaders } = useAuth();
   const { barbers } = useBarbers();
 
   const [name, setName] = useState("");
@@ -31,30 +40,31 @@ export default function AdminTeamPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formMsg, setFormMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Lista demonstrativa da equipe cadastrada
-  const [teamMembers, setTeamMembers] = useState([
-    {
-      id: "1",
-      name: "Gerente Geral (Dono)",
-      email: "admin@barberflow.com",
-      role: "admin",
-      barber_name: "Acesso Geral",
-    },
-    {
-      id: "2",
-      name: "Lucas Silva",
-      email: "lucas@barberflow.com",
-      role: "barber",
-      barber_name: "Lucas Silva",
-    },
-    {
-      id: "3",
-      name: "Gabriel Santos",
-      email: "gabriel@barberflow.com",
-      role: "barber",
-      barber_name: "Gabriel Santos",
-    },
-  ]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [loadingTeam, setLoadingTeam] = useState(true);
+
+  const fetchTeamMembers = useCallback(async () => {
+    setLoadingTeam(true);
+    try {
+      const res = await fetch("/api/admin/team", {
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) {
+        setTeamMembers(data.data);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar equipe:", err);
+    } finally {
+      setLoadingTeam(false);
+    }
+  }, [getAuthHeaders]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetchTeamMembers();
+    }
+  }, [isAdmin, fetchTeamMembers]);
 
   const handleCreateMember = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,17 +92,7 @@ export default function AdminTeamPage() {
     setSubmitting(false);
 
     if (res.success) {
-      const barberObj = barbers.find((b) => b.id === barberId);
-      setTeamMembers((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          name: name.trim(),
-          email: email.trim(),
-          role,
-          barber_name: role === "barber" ? barberObj?.name || "Barbeiro" : "Acesso Geral",
-        },
-      ]);
+      await fetchTeamMembers();
       setFormMsg({ type: "success", text: `Conta para ${name} criada com sucesso!` });
       setName("");
       setEmail("");
@@ -255,27 +255,42 @@ export default function AdminTeamPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {teamMembers.map((member) => (
-                    <TableRow key={member.id}>
-                      <TableCell className="font-semibold text-sm">
-                        {member.name}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {member.email}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={member.role === "admin" ? "default" : "secondary"}
-                          className="text-xs"
-                        >
-                          {member.role === "admin" ? "Gerente Geral" : "Barbeiro"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-gray-600">
-                        {member.barber_name}
+                  {loadingTeam ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
+                        Carregando equipe...
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : teamMembers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                        Nenhum membro da equipe encontrado.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    teamMembers.map((member) => (
+                      <TableRow key={member.id}>
+                        <TableCell className="font-semibold text-sm">
+                          {member.name}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          {member.email}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={member.role === "admin" ? "default" : "secondary"}
+                            className="text-xs"
+                          >
+                            {member.role === "admin" ? "Gerente Geral" : "Barbeiro"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-600">
+                          {member.barber_name}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>

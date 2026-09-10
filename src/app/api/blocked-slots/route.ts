@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listBlockedSlots, createBlockedSlot } from "@/services/blocked-slot.service";
+import { requireRole } from "@/lib/auth-server";
 
 // GET /api/blocked-slots?barberId=...&date=...
 export async function GET(request: NextRequest) {
@@ -25,7 +26,24 @@ export async function GET(request: NextRequest) {
 // POST /api/blocked-slots
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireRole(request, ["admin", "barber"]);
+    if (!auth.authorized) {
+      return auth.response;
+    }
+
     const body = await request.json();
+
+    // Se for barbeiro, restringe para o seu próprio barber_id
+    if (auth.user.role === "barber") {
+      if (!auth.user.barber_id) {
+        return NextResponse.json(
+          { success: false, error: "Usuário barbeiro sem perfil profissional vinculado." },
+          { status: 400 }
+        );
+      }
+      body.barber_id = auth.user.barber_id;
+    }
+
     const result = await createBlockedSlot(body);
 
     if (!result.success) {

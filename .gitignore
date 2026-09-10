@@ -29,3 +29,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+PLANO_DE_CORRECOES_ATOMICAS.md

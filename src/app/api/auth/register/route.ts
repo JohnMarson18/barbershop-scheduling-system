@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabase, supabaseAdmin } from "@/lib/supabase";
 import { RegisterSchema } from "@/schemas";
 import { UserProfile } from "@/types/api";
+import { requireRole } from "@/lib/auth-server";
 
 const isPlaceholder =
   !process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -25,17 +26,13 @@ export async function POST(request: NextRequest) {
 
     const { email, password, name, role, barber_id } = validation.data;
 
-    // Proteção contra escalação de privilégios (Privilege Escalation):
-    // Apenas requisições com credencial de administrador podem registrar administradores ou barbeiros.
-    const adminHeader = request.headers.get("x-admin-id");
-    if ((role === "admin" || role === "barber") && !adminHeader) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Apenas gerentes e administradores autenticados podem criar acessos de equipe.",
-        },
-        { status: 403 }
-      );
+    // Proteção rigorosa contra escalação de privilégios (Privilege Escalation):
+    // Apenas administradores autenticados podem registrar outros administradores ou barbeiros.
+    if (role === "admin" || role === "barber") {
+      const auth = await requireRole(request, ["admin"]);
+      if (!auth.authorized) {
+        return auth.response;
+      }
     }
 
     if (isPlaceholder) {
@@ -53,6 +50,7 @@ export async function POST(request: NextRequest) {
         data: {
           user: { id: newProfile.id, email: newProfile.email },
           profile: newProfile,
+          token: `demo-token:${newProfile.role}:${newProfile.id}`,
         },
       });
     }

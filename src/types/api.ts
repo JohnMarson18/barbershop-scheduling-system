@@ -30,4 +30,5 @@ export interface AuthResponseData {
     email: string;
   };
   profile: UserProfile;
+  token?: string;
 }

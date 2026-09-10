@@ -3,8 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { Barber, CreateBarber, UpdateBarber } from "@/schemas";
 import { ActionResponse } from "@/types/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function useBarbers(includeAll = false) {
+  const { getAuthHeaders } = useAuth();
   const [barbers, setBarbers] = useState<Barber[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +39,10 @@ export function useBarbers(includeAll = false) {
       try {
         const response = await fetch("/api/barbers", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
           body: JSON.stringify(input),
         });
         const result: ActionResponse<Barber> = await response.json();
@@ -53,7 +58,7 @@ export function useBarbers(includeAll = false) {
         return false;
       }
     },
-    [fetchBarbers]
+    [fetchBarbers, getAuthHeaders]
   );
 
   const updateBarber = useCallback(
@@ -61,7 +66,10 @@ export function useBarbers(includeAll = false) {
       try {
         const response = await fetch(`/api/barbers/${id}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
           body: JSON.stringify(input),
         });
         const result: ActionResponse<Barber> = await response.json();
@@ -77,7 +85,7 @@ export function useBarbers(includeAll = false) {
         return false;
       }
     },
-    [fetchBarbers]
+    [fetchBarbers, getAuthHeaders]
   );
 
   const deleteBarber = useCallback(
@@ -85,6 +93,7 @@ export function useBarbers(includeAll = false) {
       try {
         const response = await fetch(`/api/barbers/${id}`, {
           method: "DELETE",
+          headers: getAuthHeaders(),
         });
         const result: ActionResponse<null> = await response.json();
         if (result.success) {
@@ -99,7 +108,7 @@ export function useBarbers(includeAll = false) {
         return false;
       }
     },
-    [fetchBarbers]
+    [fetchBarbers, getAuthHeaders]
   );
 
   return {

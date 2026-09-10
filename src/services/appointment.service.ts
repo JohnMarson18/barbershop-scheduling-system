@@ -152,11 +152,17 @@ export function hasTimeConflict(
   return false;
 }
 
-export async function listAppointments(date?: string): Promise<ActionResponse<Appointment[]>> {
+export async function listAppointments(
+  date?: string,
+  barberId?: string
+): Promise<ActionResponse<Appointment[]>> {
   if (isPlaceholder) {
     let list = [...demoAppointments];
     if (date) {
       list = list.filter((apt) => apt.appointment_date === date);
+    }
+    if (barberId) {
+      list = list.filter((apt) => apt.barber_id === barberId);
     }
     return { success: true, data: list };
   }
@@ -174,21 +180,51 @@ export async function listAppointments(date?: string): Promise<ActionResponse<Ap
     if (date) {
       query = query.eq("appointment_date", date);
     }
+    if (barberId) {
+      query = query.eq("barber_id", barberId);
+    }
 
     const { data, error } = await query;
 
     if (error) {
-      console.warn("[SERVICE WARNING - listAppointments]: Usando agendamentos demo.", error.message);
-      let list = [...demoAppointments];
-      if (date) list = list.filter((apt) => apt.appointment_date === date);
-      return { success: true, data: list };
+      console.warn("[SERVICE WARNING - listAppointments]: Falha ao consultar agendamentos.", error.message);
+      return { success: false, error: "Erro ao carregar agendamentos do banco." };
     }
 
     return { success: true, data: (data || []) as Appointment[] };
   } catch (err) {
-    let list = [...demoAppointments];
-    if (date) list = list.filter((apt) => apt.appointment_date === date);
+    return { success: false, error: "Erro interno no servidor." };
+  }
+}
+
+export async function listAppointmentsByUserId(
+  userId: string
+): Promise<ActionResponse<Appointment[]>> {
+  if (isPlaceholder) {
+    const list = demoAppointments.filter((apt) => apt.user_id === userId);
     return { success: true, data: list };
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("appointments")
+      .select(`
+        *,
+        service:services(id, name, duration_minutes, price),
+        barber:barbers(id, name)
+      `)
+      .eq("user_id", userId)
+      .order("appointment_date", { ascending: false })
+      .order("appointment_time", { ascending: false });
+
+    if (error) {
+      console.error("[SERVICE ERROR - listAppointmentsByUserId]:", error.message);
+      return { success: false, error: "Erro ao buscar agendamentos do cliente." };
+    }
+
+    return { success: true, data: (data || []) as Appointment[] };
+  } catch (err) {
+    return { success: false, error: "Erro interno ao consultar agendamentos." };
   }
 }
 
@@ -211,12 +247,11 @@ export async function getAvailableSlots(
         .single();
 
       if (serviceError || !service) {
-        const s = getDemoServices().find((item) => item.id === serviceId);
-        if (s) durationMinutes = s.duration_minutes;
-        else return { success: false, error: "Serviço não encontrado." };
-      } else {
-        durationMinutes = service.duration_minutes;
+        console.error("[SERVICE ERROR - getAvailableSlots]: Falha ao buscar serviço no banco.", serviceError?.message);
+        return { success: false, error: "Serviço não encontrado no banco de dados." };
       }
+
+      durationMinutes = service.duration_minutes;
     }
 
     const appointmentDate = parseDateLocal(date);
@@ -346,8 +381,11 @@ export async function createAppointment(
       const s = getDemoServices().find((item) => item.id === service_id);
       if (s) serviceDuration = s.duration_minutes;
     } else {
-      const { data: s } = await supabase.from("services").select("duration_minutes").eq("id", service_id).single();
-      if (s) serviceDuration = s.duration_minutes;
+      const { data: s, error: sError } = await supabase.from("services").select("duration_minutes").eq("id", service_id).single();
+      if (sError || !s) {
+        return { success: false, error: "Serviço solicitado não foi encontrado no banco de dados." };
+      }
+      serviceDuration = s.duration_minutes;
     }
 
     const appointmentDate = parseDateLocal(appointment_date);
@@ -402,7 +440,46 @@ export async function createAppointment(
       return { success: true, data: newAppointment };
     }
 
-    // Fluxo com Supabase real
+    // Fluxo com Supabase real:
+    // 1. Tenta a criação atômica protegida por pg_advisory_xact_lock via Stored Procedure
+    try {
+      const { data: rpcResult, error: rpcError } = await supabaseAdmin.rpc(
+        "check_and_create_appointment",
+        {
+          p_service_id: service_id,
+          p_barber_id: barber_id,
+          p_client_name: validation.data.client_name,
+          p_client_whatsapp: validation.data.client_whatsapp,
+          p_appointment_date: appointment_date,
+          p_appointment_time: appointment_time,
+          p_user_id: validation.data.user_id || null,
+          p_lgpd_consent: validation.data.lgpd_consent ?? true,
+        }
+      );
+
+      if (!rpcError && rpcResult) {
+        if (!rpcResult.success) {
+          return { success: false, error: rpcResult.error || "Horário indisponível para agendamento." };
+        }
+
+        const createdApt = rpcResult.data;
+        const { data: fullData } = await supabaseAdmin
+          .from("appointments")
+          .select(`
+            *,
+            service:services(id, name, duration_minutes, price),
+            barber:barbers(id, name)
+          `)
+          .eq("id", createdApt.id)
+          .single();
+
+        return { success: true, data: (fullData || createdApt) as Appointment };
+      }
+    } catch {
+      // Caso a RPC não esteja instalada no banco, prossegue para o fallback direto
+    }
+
+    // 2. Fallback direto caso a procedure não esteja disponível no banco
     const { data: service } = await supabase
       .from("services")
       .select("duration_minutes")
@@ -510,9 +587,16 @@ export async function anonymizeClientAppointments(criteria: {
     let count = 0;
     demoAppointments = demoAppointments.map((apt) => {
       let matches = false;
-      if (appointmentId && apt.id === appointmentId) matches = true;
-      if (userId && apt.user_id === userId) matches = true;
-      if (whatsapp && apt.client_whatsapp === whatsapp) matches = true;
+
+      if (appointmentId && userId) {
+        matches = apt.id === appointmentId && apt.user_id === userId;
+      } else if (appointmentId) {
+        matches = apt.id === appointmentId;
+      } else if (userId) {
+        matches = apt.user_id === userId;
+      } else if (whatsapp) {
+        matches = apt.client_whatsapp === whatsapp;
+      }
 
       if (matches) {
         count++;
@@ -542,7 +626,9 @@ export async function anonymizeClientAppointments(criteria: {
         updated_at: new Date().toISOString(),
       });
 
-    if (appointmentId) {
+    if (appointmentId && userId) {
+      query = query.eq("id", appointmentId).eq("user_id", userId);
+    } else if (appointmentId) {
       query = query.eq("id", appointmentId);
     } else if (userId) {
       query = query.eq("user_id", userId);
@@ -560,4 +646,36 @@ export async function anonymizeClientAppointments(criteria: {
     return { success: false, error: "Erro interno ao processar anonimização." };
   }
 }
+
+export async function getAppointmentById(
+  id: string
+): Promise<ActionResponse<Appointment | null>> {
+  if (isPlaceholder) {
+    const found = demoAppointments.find((apt) => apt.id === id);
+    return { success: true, data: (found as Appointment) || null };
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("appointments")
+      .select(`
+        *,
+        service:services(*),
+        barber:barbers(*)
+      `)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[SERVICE ERROR - getAppointmentById]:", error.message);
+      return { success: false, error: "Erro ao buscar agendamento no banco." };
+    }
+
+    return { success: true, data: (data as Appointment) || null };
+  } catch (err) {
+    console.error("[SERVICE UNEXPECTED ERROR - getAppointmentById]:", err);
+    return { success: false, error: "Erro interno ao consultar agendamento." };
+  }
+}
+
 

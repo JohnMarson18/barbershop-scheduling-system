@@ -3,8 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { BlockedSlot, CreateBlockedSlot } from "@/schemas";
 import { ActionResponse } from "@/types/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function useBlockedSlots(barberId?: string, date?: string) {
+  const { getAuthHeaders } = useAuth();
   const [blockedSlots, setBlockedSlots] = useState<BlockedSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +44,10 @@ export function useBlockedSlots(barberId?: string, date?: string) {
       try {
         const response = await fetch("/api/blocked-slots", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
           body: JSON.stringify(input),
         });
         const result: ActionResponse<BlockedSlot> = await response.json();
@@ -58,7 +63,7 @@ export function useBlockedSlots(barberId?: string, date?: string) {
         return false;
       }
     },
-    [fetchBlockedSlots]
+    [fetchBlockedSlots, getAuthHeaders]
   );
 
   const deleteBlockedSlot = useCallback(
@@ -66,6 +71,7 @@ export function useBlockedSlots(barberId?: string, date?: string) {
       try {
         const response = await fetch(`/api/blocked-slots/${id}`, {
           method: "DELETE",
+          headers: getAuthHeaders(),
         });
         const result: ActionResponse<null> = await response.json();
         if (result.success) {
@@ -80,7 +86,7 @@ export function useBlockedSlots(barberId?: string, date?: string) {
         return false;
       }
     },
-    [fetchBlockedSlots]
+    [fetchBlockedSlots, getAuthHeaders]
   );
 
   return {

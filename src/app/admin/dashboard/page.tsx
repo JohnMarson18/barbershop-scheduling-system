@@ -30,7 +30,7 @@ import { Appointment } from "@/schemas";
 import { ActionResponse } from "@/types/api";
 
 export default function AdminDashboard() {
-  const { profile, isAdmin, isBarber } = useAuth();
+  const { profile, isAdmin, isBarber, getAuthHeaders } = useAuth();
   const { barbers } = useBarbers();
 
   const getTodayStr = () => {
@@ -56,7 +56,9 @@ export default function AdminDashboard() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const response = await fetch(`/api/appointments?date=${date}`);
+      const response = await fetch(`/api/appointments?date=${date}`, {
+        headers: getAuthHeaders(),
+      });
       const result: ActionResponse<any[]> = await response.json();
       if (result.success) {
         setAppointments(result.data || []);
@@ -68,7 +70,7 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getAuthHeaders]);
 
   useEffect(() => {
     fetchAppointments(selectedDate);
@@ -90,7 +92,10 @@ export default function AdminDashboard() {
     try {
       const response = await fetch(`/api/appointments/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
         body: JSON.stringify({ status }),
       });
       const result: ActionResponse<Appointment> = await response.json();

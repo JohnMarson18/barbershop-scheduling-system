@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listBarbers, createBarber } from "@/services/barber.service";
+import { requireRole } from "@/lib/auth-server";
 
 // GET /api/barbers?all=true
 export async function GET(request: NextRequest) {
@@ -24,6 +25,11 @@ export async function GET(request: NextRequest) {
 // POST /api/barbers
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireRole(request, ["admin"]);
+    if (!auth.authorized) {
+      return auth.response;
+    }
+
     const body = await request.json();
     const result = await createBarber(body);
 

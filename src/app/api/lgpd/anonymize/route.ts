@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { anonymizeClientAppointments } from "@/services/appointment.service";
+import { anonymizeClientAppointments, getAppointmentById } from "@/services/appointment.service";
+import { getAuthenticatedUser } from "@/lib/auth-server";
 
 const isPlaceholder =
   !process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -9,14 +10,62 @@ const isPlaceholder =
 // POST /api/lgpd/anonymize
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { appointmentId, whatsapp, userId } = body;
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Acesso não autorizado. É necessário estar autenticado para exercer direitos sob a LGPD.",
+        },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json().catch(() => ({}));
+    let { appointmentId, whatsapp, userId } = body;
+
+    // Se for cliente, restringe estritamente para o seu próprio ID
+    if (user.role === "client") {
+      userId = user.id;
+      whatsapp = undefined;
+
+      if (appointmentId) {
+        const aptResult = await getAppointmentById(appointmentId);
+        if (!aptResult.success || !aptResult.data) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Agendamento não encontrado.",
+            },
+            { status: 404 }
+          );
+        }
+
+        if (aptResult.data.user_id !== user.id) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Você não possui permissão para anonimizar agendamentos de outros clientes.",
+            },
+            { status: 403 }
+          );
+        }
+      }
+    } else if (user.role === "barber") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Barbeiros não possuem permissão para executar solicitações de exclusão LGPD.",
+        },
+        { status: 403 }
+      );
+    }
 
     if (!appointmentId && !whatsapp && !userId) {
       return NextResponse.json(
         {
           success: false,
-          error: "Identificador não fornecido (userId, appointmentId ou whatsapp são necessários).",
+          error: "Identificador para anonimização não fornecido.",
         },
         { status: 400 }
       );

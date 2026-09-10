@@ -60,15 +60,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // Suporte para retrocompatibilidade com senha antiga direta ou novo email+senha
-    let email = body.email;
-    const password = body.password;
-
-    if (!email && password) {
-      email = ADMIN_EMAIL;
-    }
-
-    const validation = LoginSchema.safeParse({ email, password });
+    const validation = LoginSchema.safeParse(body);
     if (!validation.success) {
       return NextResponse.json(
         {
@@ -92,6 +84,7 @@ export async function POST(request: NextRequest) {
           data: {
             user: { id: found.profile.id, email: found.profile.email },
             profile: found.profile,
+            token: `demo-token:${found.profile.role}:${found.profile.id}`,
           },
         });
       }
@@ -115,6 +108,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const sessionToken = authData.session?.access_token;
+
     // Buscar perfil do usuário na tabela profiles
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
@@ -136,6 +131,7 @@ export async function POST(request: NextRequest) {
         data: {
           user: { id: authData.user.id, email: authData.user.email || "" },
           profile: fallbackProfile,
+          token: sessionToken,
         },
       });
     }
@@ -145,6 +141,7 @@ export async function POST(request: NextRequest) {
       data: {
         user: { id: authData.user.id, email: authData.user.email || "" },
         profile,
+        token: sessionToken,
       },
     });
   } catch (err) {

@@ -3,8 +3,10 @@
 import { useState, useCallback } from "react";
 import { CreateAppointment, CreateAppointmentSchema, Appointment } from "@/schemas";
 import { ActionResponse } from "@/types/api";
+import { useAuth } from "@/hooks/useAuth";
 
 export function useAppointment() {
+  const { getAuthHeaders } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,7 +25,10 @@ export function useAppointment() {
       try {
         const response = await fetch("/api/appointments", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
           body: JSON.stringify(validation.data),
         });
 
@@ -41,7 +46,7 @@ export function useAppointment() {
         setLoading(false);
       }
     },
-    []
+    [getAuthHeaders]
   );
 
   return { createAppointment, loading, error };

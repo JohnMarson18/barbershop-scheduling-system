@@ -53,16 +53,14 @@ export async function listServices(includeInactive = false): Promise<ActionRespo
     const { data, error } = await query;
 
     if (error) {
-      // Fallback gracioso para dados demo se o banco falhar
-      console.warn("[SERVICE WARNING - listServices]: Falha no banco, usando dados demo.", error.message);
-      const list = includeInactive ? demoServices : demoServices.filter((s) => s.is_active);
-      return { success: true, data: list };
+      console.error("[SERVICE ERROR - listServices]: Falha ao consultar serviços no banco.", error.message);
+      return { success: false, error: "Erro ao carregar serviços do banco de dados." };
     }
 
     return { success: true, data: (data || []) as Service[] };
   } catch (err) {
-    const list = includeInactive ? demoServices : demoServices.filter((s) => s.is_active);
-    return { success: true, data: list };
+    console.error("[UNEXPECTED ERROR - listServices]:", err);
+    return { success: false, error: "Erro interno inesperado ao listar serviços." };
   }
 }
 

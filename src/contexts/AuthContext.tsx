@@ -8,11 +8,13 @@ const STORAGE_KEY = "barbearia_auth_session";
 export interface AuthContextType {
   profile: UserProfile | null;
   role: UserRole | null;
+  token: string | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
   isBarber: boolean;
   isClient: boolean;
   loading: boolean;
+  getAuthHeaders: () => Record<string, string>;
   login: (emailOrPassword: string, passwordOnly?: string) => Promise<boolean>;
   register: (input: {
     name: string;
@@ -27,17 +29,22 @@ export interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const TOKEN_KEY = "barbearia_auth_token";
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
   // Carrega a sessão inicial do localStorage
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
+      const storedToken = localStorage.getItem(TOKEN_KEY);
       if (stored) {
         const parsed: UserProfile = JSON.parse(stored);
         setProfile(parsed);
+        setToken(storedToken || (parsed ? `demo-token:${parsed.role}:${parsed.id}` : null));
       }
     } catch (err) {
       console.warn("Erro ao restaurar sessão:", err);
@@ -50,12 +57,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (e.key === STORAGE_KEY) {
         if (e.newValue) {
           try {
-            setProfile(JSON.parse(e.newValue));
+            const newProfile = JSON.parse(e.newValue);
+            setProfile(newProfile);
+            setToken(localStorage.getItem(TOKEN_KEY) || `demo-token:${newProfile.role}:${newProfile.id}`);
           } catch {
             setProfile(null);
+            setToken(null);
           }
         } else {
           setProfile(null);
+          setToken(null);
         }
       }
     };
@@ -63,6 +74,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
+
+  const getAuthHeaders = useCallback((): Record<string, string> => {
+    const currentToken = token || (profile ? `demo-token:${profile.role}:${profile.id}` : null);
+    if (!currentToken) return {};
+    return {
+      Authorization: `Bearer ${currentToken}`,
+    };
+  }, [token, profile]);
 
   const login = useCallback(
     async (emailOrPassword: string, passwordOnly?: string): Promise<boolean> => {
@@ -84,9 +103,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const result = await response.json();
         if (result.success && result.data?.profile) {
           const userProfile: UserProfile = result.data.profile;
+          const authToken = result.data.token || `demo-token:${userProfile.role}:${userProfile.id}`;
+
           // Atualiza estado global imediatamente
           setProfile(userProfile);
+          setToken(authToken);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(userProfile));
+          localStorage.setItem(TOKEN_KEY, authToken);
           localStorage.setItem(
             "admin_authenticated",
             userProfile.role === "client" ? "false" : "true"
@@ -113,8 +136,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }): Promise<{ success: boolean; error?: string }> => {
       try {
         const headers: Record<string, string> = { "Content-Type": "application/json" };
-        if (profile?.role === "admin") {
-          headers["x-admin-id"] = profile.id;
+        const currentToken = token || (profile ? `demo-token:${profile.role}:${profile.id}` : null);
+        if (currentToken) {
+          headers["Authorization"] = `Bearer ${currentToken}`;
         }
 
         const response = await fetch("/api/auth/register", {
@@ -127,8 +151,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (result.success && result.data?.profile) {
           if (!profile || profile.role === "client") {
             const userProfile: UserProfile = result.data.profile;
+            const authToken = result.data.token || `demo-token:${userProfile.role}:${userProfile.id}`;
             setProfile(userProfile);
+            setToken(authToken);
             localStorage.setItem(STORAGE_KEY, JSON.stringify(userProfile));
+            localStorage.setItem(TOKEN_KEY, authToken);
             localStorage.setItem(
               "admin_authenticated",
               userProfile.role === "client" ? "false" : "true"
@@ -141,13 +168,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: "Erro de conexão ao cadastrar." };
       }
     },
-    [profile]
+    [profile, token]
   );
 
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem("admin_authenticated");
     setProfile(null);
+    setToken(null);
   }, []);
 
   const isAuthenticated = !!profile;
@@ -161,11 +190,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         profile,
         role,
+        token,
         isAuthenticated,
         isAdmin,
         isBarber,
         isClient,
         loading,
+        getAuthHeaders,
         login,
         register,
         logout,

@@ -3,8 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { Service, CreateService, UpdateService } from "@/schemas";
 import { ActionResponse } from "@/types/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function useServices(includeAll = false) {
+  const { getAuthHeaders } = useAuth();
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +39,10 @@ export function useServices(includeAll = false) {
       try {
         const response = await fetch("/api/services", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
           body: JSON.stringify(input),
         });
         const result: ActionResponse<Service> = await response.json();
@@ -53,7 +58,7 @@ export function useServices(includeAll = false) {
         return false;
       }
     },
-    [fetchServices]
+    [fetchServices, getAuthHeaders]
   );
 
   const updateService = useCallback(
@@ -61,7 +66,10 @@ export function useServices(includeAll = false) {
       try {
         const response = await fetch(`/api/services/${id}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
           body: JSON.stringify(input),
         });
         const result: ActionResponse<Service> = await response.json();
@@ -77,7 +85,7 @@ export function useServices(includeAll = false) {
         return false;
       }
     },
-    [fetchServices]
+    [fetchServices, getAuthHeaders]
   );
 
   const deleteService = useCallback(
@@ -85,6 +93,7 @@ export function useServices(includeAll = false) {
       try {
         const response = await fetch(`/api/services/${id}`, {
           method: "DELETE",
+          headers: getAuthHeaders(),
         });
         const result: ActionResponse<null> = await response.json();
         if (result.success) {
@@ -99,7 +108,7 @@ export function useServices(includeAll = false) {
         return false;
       }
     },
-    [fetchServices]
+    [fetchServices, getAuthHeaders]
   );
 
   return {

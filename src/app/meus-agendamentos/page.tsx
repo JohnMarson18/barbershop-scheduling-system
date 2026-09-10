@@ -26,7 +26,7 @@ import { siteConfig } from "@/config/site";
 
 export default function ClientAppointmentsPage() {
   const router = useRouter();
-  const { profile, isAuthenticated, loading: authLoading, logout } = useAuth();
+  const { profile, isAuthenticated, loading: authLoading, getAuthHeaders, logout } = useAuth();
   const [appointments, setAppointments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -35,24 +35,20 @@ export default function ClientAppointmentsPage() {
     if (!profile) return;
     setLoading(true);
     try {
-      // Busca todos os agendamentos e filtra pelos dados do cliente logado
-      const response = await fetch("/api/appointments");
+      // Busca estritamente os agendamentos pertencentes ao cliente autenticado
+      const response = await fetch("/api/my-appointments", {
+        headers: getAuthHeaders(),
+      });
       const result = await response.json();
       if (result.success && result.data) {
-        const clientList = result.data.filter(
-          (apt: any) =>
-            (apt.user_id && apt.user_id === profile.id) ||
-            apt.client_name.toLowerCase().includes(profile.name.toLowerCase()) ||
-            apt.client_name.toLowerCase() === profile.name.toLowerCase()
-        );
-        setAppointments(clientList);
+        setAppointments(result.data);
       }
     } catch (err) {
       console.error("Erro ao carregar agendamentos do cliente:", err);
     } finally {
       setLoading(false);
     }
-  }, [profile]);
+  }, [profile, getAuthHeaders]);
 
   useEffect(() => {
     if (!authLoading) {
@@ -70,7 +66,10 @@ export default function ClientAppointmentsPage() {
     try {
       const response = await fetch(`/api/appointments/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
         body: JSON.stringify({ status: "cancelled" }),
       });
       const result = await response.json();
@@ -99,7 +98,10 @@ export default function ClientAppointmentsPage() {
     try {
       const response = await fetch("/api/lgpd/anonymize", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
         body: JSON.stringify({ userId: profile?.id }),
       });
       const result = await response.json();
@@ -107,9 +109,11 @@ export default function ClientAppointmentsPage() {
         alert(result.message);
         logout();
         router.push("/");
+      } else {
+        alert(result.error || "Erro ao solicitar anonimização.");
       }
     } catch (err) {
-      alert("Erro ao solicitar anonimização.");
+      alert("Erro de rede ao solicitar anonimização.");
     }
   };
 

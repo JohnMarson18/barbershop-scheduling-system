@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateBarber, deleteBarber } from "@/services/barber.service";
+import { requireRole } from "@/lib/auth-server";
 
 // PUT /api/barbers/[id]
 export async function PUT(
@@ -7,6 +8,11 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireRole(request, ["admin"]);
+    if (!auth.authorized) {
+      return auth.response;
+    }
+
     const { id } = params;
     const body = await request.json();
 
@@ -26,10 +32,15 @@ export async function PUT(
 
 // DELETE /api/barbers/[id]
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireRole(request, ["admin"]);
+    if (!auth.authorized) {
+      return auth.response;
+    }
+
     const { id } = params;
     const result = await deleteBarber(id);
 

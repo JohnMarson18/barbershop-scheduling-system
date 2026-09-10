@@ -43,15 +43,14 @@ export async function listBarbers(includeInactive = false): Promise<ActionRespon
     const { data, error } = await query;
 
     if (error) {
-      console.warn("[SERVICE WARNING - listBarbers]: Usando barbeiros demo.", error.message);
-      const list = includeInactive ? demoBarbers : demoBarbers.filter((b) => b.is_active);
-      return { success: true, data: list };
+      console.error("[SERVICE ERROR - listBarbers]: Falha ao consultar barbeiros no banco.", error.message);
+      return { success: false, error: "Erro ao carregar barbeiros do banco de dados." };
     }
 
     return { success: true, data: (data || []) as Barber[] };
   } catch (err) {
-    const list = includeInactive ? demoBarbers : demoBarbers.filter((b) => b.is_active);
-    return { success: true, data: list };
+    console.error("[UNEXPECTED ERROR - listBarbers]:", err);
+    return { success: false, error: "Erro interno inesperado ao listar barbeiros." };
   }
 }
 

@@ -45,19 +45,14 @@ export async function listBlockedSlots(
     const { data, error } = await query.order("block_date", { ascending: true });
 
     if (error) {
-      console.warn("[SERVICE WARNING - listBlockedSlots]: Usando bloqueios demo.", error.message);
-      let list = [...demoBlockedSlots];
-      if (barberId) list = list.filter((b) => b.barber_id === barberId);
-      if (date) list = list.filter((b) => b.block_date === date);
-      return { success: true, data: list };
+      console.error("[SERVICE ERROR - listBlockedSlots]: Falha ao consultar bloqueios no banco.", error.message);
+      return { success: false, error: "Erro ao carregar bloqueios de horários do banco de dados." };
     }
 
     return { success: true, data: (data || []) as BlockedSlot[] };
   } catch (err) {
-    let list = [...demoBlockedSlots];
-    if (barberId) list = list.filter((b) => b.barber_id === barberId);
-    if (date) list = list.filter((b) => b.block_date === date);
-    return { success: true, data: list };
+    console.error("[UNEXPECTED ERROR - listBlockedSlots]:", err);
+    return { success: false, error: "Erro interno inesperado ao listar bloqueios." };
   }
 }
 
@@ -176,3 +171,34 @@ export async function deleteBlockedSlot(id: string): Promise<ActionResponse<null
 export function getDemoBlockedSlots(): BlockedSlot[] {
   return demoBlockedSlots;
 }
+
+export async function getBlockedSlotById(
+  id: string
+): Promise<ActionResponse<BlockedSlot | null>> {
+  if (isPlaceholder) {
+    const found = demoBlockedSlots.find((b) => b.id === id);
+    return { success: true, data: (found as BlockedSlot) || null };
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("blocked_slots")
+      .select(`
+        *,
+        barber:barbers(*)
+      `)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[SERVICE ERROR - getBlockedSlotById]:", error.message);
+      return { success: false, error: "Erro ao buscar bloqueio de horário no banco." };
+    }
+
+    return { success: true, data: (data as BlockedSlot) || null };
+  } catch (err) {
+    console.error("[UNEXPECTED ERROR - getBlockedSlotById]:", err);
+    return { success: false, error: "Erro interno inesperado ao consultar bloqueio." };
+  }
+}
+
